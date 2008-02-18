@@ -3,9 +3,8 @@
 
 /**
  * Search A9 OpenSearch compatible engines.
- * This is porting Perl modules WWW::OpenSearch.
  *
- * PHP versions 4 and 5
+ * PHP versions 5
  *
  * LICENSE: This source file is subject to version 3.0 of the PHP license
  * that is available through the world-wide-web at the following URI:
@@ -16,7 +15,7 @@
  * @category   Web Services
  * @package    Services_OpenSearch
  * @author     HIROSE Masaaki <hirose31@irori.org>
- * @copyright  2005 HIROSE Masaaki
+ * @copyright  2005-2008 HIROSE Masaaki
  * @license    http://www.php.net/license/3_0.txt  PHP License 3.0
  * @version    CVS: $Id$
  * @link       http://pear.php.net/package/Services_OpenSearch/
@@ -24,10 +23,9 @@
 
 require_once 'PEAR.php';
 require_once 'HTTP/Request.php';
-require_once 'XML/Unserializer.php';
 require_once 'XML/RSS.php';
 
-define('SERVICES_OPENSEARCH_VERSION',    '0.1.0');
+define('SERVICES_OPENSEARCH_VERSION',    '0.2.0');
 define('SERVICES_OPENSEARCH_USER_AGENT', 'Services_OpenSearch/'.SERVICES_OPENSEARCH_VERSION);
 // for fopen
 ini_set('user_agent', SERVICES_OPENSEARCH_USER_AGENT);
@@ -41,7 +39,6 @@ ini_set('user_agent', SERVICES_OPENSEARCH_USER_AGENT);
  * @author  HIROSE Masaaki <hirose31@irori.org>
  * @uses    PEAR
  * @uses    HTTP_Request
- * @uses    XML_Unserializer
  * @uses    XML_RSS
  */
 class Services_OpenSearch {
@@ -72,15 +69,17 @@ class Services_OpenSearch {
         'Contact',
         'SyndicationRight',
         'AdultContent',
+        //
+        'Query',
         );
 
     /**
      * Element values in OpenSearch Description Document.
      *
      * @access private
-     * @var    array
+     * @var    object of SimpleXMLElement class.
      */
-    var $_desc;
+    var $_xml;
 
     /**
      * User-Agent for HTTP access.
@@ -105,7 +104,7 @@ class Services_OpenSearch {
             $this->pager_param = $pager_param;
         }
 
-        $this->_desc = array();
+        $this->_desc = null;
         $this->_pager_default = array(
             'count'        => 10,
             'startIndex'   => 1,
@@ -173,7 +172,7 @@ class Services_OpenSearch {
      */
     function setDescriptionUrl($url) {
         if ($this->_descriptionUrl != $url) {
-            $this->_desc = array();
+            $this->_xml = null;
         }
         $this->_descriptionUrl = $url;
     }
@@ -263,37 +262,76 @@ class Services_OpenSearch {
      * If need, fetch and set element value.
      *
      * @access private
-     * @param  string $name 
+     * @param  string $name
      * @return string
      */
     function _getDescription($name) {
         if (! isset($this->_descriptionUrl)) {
             return PEAR::raiseError("missing description URL");
         }
-        if (! isset($this->_desc[$name])) {
+        if (! $this->_xml) {
             $ret = $this->_fetchDescription($this->_descriptionUrl);
-            if (is_null($ret) || PEAR::isError($ret)) {
+            if (is_null($ret)) {
+                return null;
+            } else if (PEAR::isError($ret)) {
+                trigger_error($ret->getMessage(), E_USER_WARNING);
                 return null;
             }
         }
-        return isset($this->_desc[$name]) ? $this->_desc[$name] : null;
+
+        return property_exists($this->_xml, $name) ? $this->_xml->$name : null;
+    }
+
+    /**
+     * Retrieves OpenSearch specification version.
+     *
+     * @access public
+     * @return float
+     */
+    function getOpenSearchVersion() {
+        $url   = $this->_getDescription("Url");
+        $xmlns = $this->_xml->getDocNamespaces();
+
+        switch ($xmlns[""]) {
+        case "http://a9.com/-/spec/opensearchdescription/1.0/":
+            return 1.0;
+        case "http://a9.com/-/spec/opensearch/1.1/":
+            return 1.1;
+        default:
+            return 1.1;
+        }
     }
 
     /**
      * Retrieves Url element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return array
      */
     function getUrl() {
-        return $this->_getDescription('Url');
+        $url = null;
+        switch ($this->getOpenSearchVersion()) {
+        case 1.0:
+            $url["text/xml"] = $this->_getDescription('Url')."";
+            break;
+        case 1.1:
+            $urls = &$this->_getDescription('Url');
+            foreach ($urls as $u) {
+                $url[$u["type"].""] = $u["template"]."";
+            }
+            break;
+        default:
+            $url = null;
+            break;
+        }
+        return $url;
     }
 
     /**
      * Retrieves Format element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getFormat() {
         return $this->_getDescription('Format');
@@ -303,7 +341,7 @@ class Services_OpenSearch {
      * Retrieves ShortName element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getShortName() {
         return $this->_getDescription('ShortName');
@@ -313,7 +351,7 @@ class Services_OpenSearch {
      * Retrieves LongName element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getLongName() {
         return $this->_getDescription('LongName');
@@ -323,7 +361,7 @@ class Services_OpenSearch {
      * Retrieves Description element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getDescription() {
         return $this->_getDescription('Description');
@@ -333,7 +371,7 @@ class Services_OpenSearch {
      * Retrieves Tags element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getTags() {
         return $this->_getDescription('Tags');
@@ -343,7 +381,7 @@ class Services_OpenSearch {
      * Retrieves getImage element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getImage() {
         return $this->_getDescription('Image');
@@ -353,7 +391,7 @@ class Services_OpenSearch {
      * Retrieves SampleSearch element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getSampleSearch() {
         return $this->_getDescription('SampleSearch');
@@ -363,7 +401,7 @@ class Services_OpenSearch {
      * Retrieves Developer element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getDeveloper() {
         return $this->_getDescription('Developer');
@@ -373,7 +411,7 @@ class Services_OpenSearch {
      * Retrieves Contact element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getContact() {
         return $this->_getDescription('Contact');
@@ -383,7 +421,7 @@ class Services_OpenSearch {
      * Retrieves SyndicationRight element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getSyndicationRight() {
         return $this->_getDescription('SyndicationRight');
@@ -393,7 +431,7 @@ class Services_OpenSearch {
      * Retrieves AdultContent element value in OpenSearch Description Document.
      *
      * @access public
-     * @return string 
+     * @return string
      */
     function getAdultContent() {
         return $this->_getDescription('AdultContent');
@@ -406,10 +444,30 @@ class Services_OpenSearch {
      * @param  string $url URI of OpenSearch Description Document
      */
     function _fetchDescription($url) {
-        $req = new HTTP_Request($url);
+        $req = $this->_requestHTTP($url);
+        $xml = $this->_parseDescription($req->getResponseBody());
+        if (PEAR::isError($xml)) {
+            trigger_error($xml->getMessage(), E_USER_WARNING);
+            return null;
+        }
+        $this->_xml = $xml;
+
+        return true;
+    }
+
+    /**
+     * helper function to GET HTTP access.
+     *
+     * @access private
+     * @param  string
+     */
+    function _requestHTTP($url) {
+        $req = new HTTP_Request($url, array("allowRedirects" => true));
         $req->addHeader('User-Agent', SERVICES_OPENSEARCH_USER_AGENT);
 
-        if (PEAR::isError($req->sendRequest())) {
+        $r = $req->sendRequest();
+        if (PEAR::isError($r)) {
+            trigger_error($r->getMessage(), E_USER_WARNING);
             return null;
         }
         switch ($req->getResponseCode()) {
@@ -418,17 +476,7 @@ class Services_OpenSearch {
         default:
             return PEAR::raiseError('OpenSearch: return HTTP ' . $req->getResponseCode());
         }
-
-        $data = $this->_parseDescription($req->getResponseBody());
-        if (PEAR::isError($data)) {
-            return null;
-        }
-
-        foreach ($data as $k => $v) {
-            $this->_desc[$k] = $v;
-        }
-
-        return true;
+        return $req;
     }
 
     /**
@@ -436,24 +484,44 @@ class Services_OpenSearch {
      *
      * @access private
      * @param  string $xml OpenSearch Description Document data.
+     * @return object of SimpleXMLElement class.
+     */
+    function _parseDescription($xmlstr) {
+        $xml = simplexml_load_string($xmlstr);
+        if (! $xml) {
+            return PEAR::raiseError("SimpleXML: failed to load XML string.");
+        }
+        return $xml;
+    }
+
+    /**
+     * Retrieves URL to search query.
+     *
+     * @access public
+     * @param  string $query keyword
      * @return array
      */
-    function _parseDescription($xml) {
-        $parser = new XML_Unserializer(array('complexType' => 'array'));
-        $parser->unserialize($xml, false);
-        $doc = $parser->getUnserializedData();
-        if (isset($doc->ErrorMsg)) {
-            return PEAR::raiseError($doc->ErrorMsg);
+    function getSearchURLfor($query) {
+        $search  = array('{searchTerms}',
+                         '{count}',
+                         '{startIndex}',
+                         '{startPage}',
+                         // TODO...
+                         //'{language}',
+                         //'{inputEncoding}',
+                         //'{outputEncoding}',
+            );
+        $replace = array(urlencode($query),
+                         $this->pager_param['count'],
+                         $this->pager_param['startIndex'],
+                         $this->pager_param['startPage'],
+            );
+
+        $url = $this->getUrl();
+        foreach ($url as &$u) {
+            $u = str_replace($search, $replace, $u);
         }
-        $data = array();
-        foreach ($this->_cols as $c) {
-            if (isset($doc[$c])) {
-                $data[$c] = $doc[$c];
-            } else {
-                $data[$c] = null;
-            }
-        }
-        return $data;
+        return $url;
     }
 
     /**
@@ -464,48 +532,33 @@ class Services_OpenSearch {
      * @return array
      */
     function search($query) {
-        $url = $this->_setupQuery($query);
-        // trigger_error($url);
-        $rss = new XML_RSS($url);
-        array_push($rss->channelTags, 'OPENSEARCH:TOTALRESULTS', 'OPENSEARCH:STARTINDEX', 'OPENSEARCH:ITEMSPERPAGE');
-        $rss->parse();
+        $urls = $this->getSearchURLfor($query);
 
-        $ch = $rss->getChannelInfo();
-        if (isset($ch['opensearch:totalresults'])) {
-            $this->pager_param['totalResults'] = $ch['opensearch:totalresults'];
+        if (isset( $urls["text/xml"] )) {
+            $rss = new XML_RSS($urls["text/xml"]);
+            array_push($rss->channelTags, 'OPENSEARCH:TOTALRESULTS', 'OPENSEARCH:STARTINDEX', 'OPENSEARCH:ITEMSPERPAGE');
+            $rss->parse();
+
+            $ch = $rss->getChannelInfo();
+            if (isset($ch['opensearch:totalresults'])) {
+                $this->pager_param['totalResults'] = $ch['opensearch:totalresults'];
+            }
+            if (isset($ch['opensearch:itemsperpage'])) {
+                $this->pager_param['itemsPerPage'] = $ch['opensearch:itemsperpage'];
+            }
+            if (isset($ch['opensearch:startindex'])) {
+                $this->pager_param['startIndex'] = $ch['opensearch:startindex'];
+            }
+
+            return $rss->getItems();
+        } else if (isset( $urls["text/html"] )
+                   || isset( $urls["text/xhtml"] )
+            ) {
+            $req = $this->_requestHTTP( $urls["text/html"] );
+            return $req->getResponseBody();
+        } else {
+            return null;
         }
-        if (isset($ch['opensearch:itemsperpage'])) {
-            $this->pager_param['itemsPerPage'] = $ch['opensearch:itemsperpage'];
-        }
-        if (isset($ch['opensearch:startindex'])) {
-            $this->pager_param['startIndex'] = $ch['opensearch:startindex'];
-        }
-
-        return $rss->getItems();
-    }
-
-    /**
-     * Setup search URL.
-     *
-     * @access private
-     * @param  string $query keyword
-     * @return string $url search URL
-     */
-    function _setupQuery($query) {
-        $search  = array('{searchTerms}',
-                         '{count}',
-                         '{startIndex}',
-                         '{startPage}',
-            );
-        $replace = array(urlencode($query),
-                         $this->pager_param['count'],
-                         $this->pager_param['startIndex'],
-                         $this->pager_param['startPage'],
-            );
-        $url     = $this->getUrl();
-
-        $url = str_replace($search, $replace, $url);
-        return $url;
     }
 }
 
