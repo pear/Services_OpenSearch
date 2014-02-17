@@ -1,0 +1,28 @@
+{
+    "authors": [
+        {
+            "email": "hiroes31@gmail.com",
+            "name": "HIROSE Masaaki",
+            "role": "Lead"
+        }
+    ],
+    "autoload": {
+        "classmap": [
+            "./"
+        ]
+    },
+    "description": "More info available on: http://pear.php.net/package/Services_OpenSearch",
+    "license": "PHP License 3.0",
+    "name": "pear/services_opensearch",
+    "support": {
+        "issues": "http://pear.php.net/bugs/search.php?cmd=display&package_name[]=Services_OpenSearch",
+        "source": "https://github.com/pear/Services_OpenSearch"
+    },
+    "type": "library",
+    "require": {
+        "pear/pear_exception": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "*"
+    }
+}
